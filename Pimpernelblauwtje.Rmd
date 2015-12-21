@@ -1,0 +1,187 @@
+---
+title: "Herintroductiegebieden voor het Pimpernelblauwtje"
+author: "Gerben Boon"
+date: "21 december 2015"
+output: html_document
+---
+
+Het pimpernelblauwtje komt op dit moment in Nederland alleen voor in de Moerputten bij Den Bosch, waar deze soort enige tijd geleden opnieuw is uitgezet. Het leek me interessant om uit te zoeken waar de ecologische omstandigheden zodanig zijn, dat ook daar een herintroductie een kans van slagen zou kunnen hebben. 
+Als open-source databron heb ik waarneming.nl gekozen. 
+
+Eerste actor is de grote pimpernel, de waardplant van deze vlinder.
+```{r}
+library(rvest,quietly=TRUE,warn.conflicts=FALSE)
+library(stringr,quietly=TRUE,warn.conflicts=FALSE)
+
+soort="grote_pimpernel"
+start_jaar="2010"
+eind_jaar="2015"
+url="http://www.waarneming.nl/"
+
+filename <- paste("waarnemingen_",soort,".Rdmpd",sep="")
+
+if(!file.exists(filename)) {
+  pimpernel <- paste(url,"soortenlijst.php?q=",soort,"&g=0",sep="") %>% 
+    read_html()
+  
+  href_pimpernel <- pimpernel %>% 
+    html_nodes("a.z2") %>% 
+    html_attr("href")
+  
+  href_pimpernel <- href_pimpernel[1]
+  
+  sub1="?waardplant=0&poly=1"
+  timeframe=paste("&from=",start_jaar,"-01-01&to=",eind_jaar,"-12-31",sep="")
+  sub2="&prov=0&maand=0&rows=0&os=0&hide_hidden=0"
+  href_waarnemingen_pimpernel <- paste(url,href_pimpernel,sub1,timeframe,sub2,sep="") %>% 
+    read_html() %>%
+    html_nodes("a.tooltip") %>%
+    html_attr("href")
+  
+  waarnemingen_pimpernel <- data.frame(waarneming=character(),datum=character(),long=as.numeric(),lat=as.numeric(),gebied=character(),stringsAsFactors=FALSE)
+  
+  for(i in 1:length(href_waarnemingen_pimpernel)){
+    if(href_waarnemingen_pimpernel[i]!="  "){
+      waarneming_details <- paste(url,waarneming<-href_waarnemingen_pimpernel[i],sep="") %>%
+        read_html() 
+      gps_coords <- waarneming_details %>%
+        html_nodes("th:contains('GPS')~td") %>%
+        html_text()
+      datum <- waarneming_details %>%
+        html_nodes("th:contains('Datum')~td") %>%
+        html_text()
+      gebied <- waarneming_details %>%
+        html_nodes("th:contains('Gebied')~td>a") %>%
+        html_attr("href")
+      if(toString(gps_coords)!=""){
+        long <- strsplit(gps_coords,", ")[[1]][1] %>% as.numeric()
+        lat <- strsplit(gps_coords,", ")[[1]][2] %>% as.numeric()
+        waarnemingen_pimpernel[i,] <- list(waarneming,datum,long,lat,gebied)
+      } else {
+        waarnemingen_pimpernel[i,] <- list(waarneming,start_jaar,0,0,gebied)
+      }
+    } else {
+      waarnemingen_pimpernel[i,] <- list(waarneming,start_jaar,0,0,gebied)
+    }
+  }
+  
+  dump("waarnemingen_pimpernel",filename)
+} else {
+  source(filename)
+}
+```
+
+Tweede actor is de moerassteekmier, die de rups beschermt, en op wiens broed de rups parasiteert. Er zijn niet heel veel waarnemingen van deze soort ingevoerd; daarom heb ik gekozen voor de periode 2010-2015. Dat er niet zoveel waarnemingen zijn ingevoerd, kan meerdere oorzaken hebben: of er zijn niet veel waarnemers, of deze mensen voeren hun gegevens in een andere omgeving in, of er zijn gewoon niet zoveel populaties van deze mieren in Nederland.
+```{r}
+soort="moerassteekmier"
+
+filename <- paste("waarnemingen_",soort,".Rdmpd",sep="")
+
+if(!file.exists(filename)) {
+  mier <- paste(url,"soortenlijst.php?q=",soort,"&g=0",sep="") %>% 
+    read_html()
+  
+  href_mier <- mier %>% 
+    html_nodes("a.z1") %>% 
+    html_attr("href")
+  
+  href_mier <- href_mier[1]
+  
+  sub1="?waardplant=0&poly=1"
+  timeframe=paste("&from=",start_jaar,"-01-01&to=",eind_jaar,"-12-31",sep="")
+  sub2="&prov=0&maand=0&rows=0&os=0&hide_hidden=0"
+  href_waarnemingen_mier <- paste(url,href_mier,sub1,timeframe,sub2,sep="") %>% 
+    read_html() %>%
+    html_nodes("a.tooltip") %>%
+    html_attr("href")
+  
+  waarnemingen_mier <- data.frame(waarneming=character(),datum=character(),long=as.numeric(),lat=as.numeric(),gebied=character(),stringsAsFactors=FALSE)
+  
+  for(i in 1:length(href_waarnemingen_mier)){
+    if(href_waarnemingen_pimpernel[i]!="  "){
+      waarneming_details <- paste(url,waarneming<-href_waarnemingen_mier[i],sep="") %>%
+        read_html() 
+      gps_coords <- waarneming_details %>%
+        html_nodes("th:contains('GPS')~td") %>%
+        html_text()
+      datum <- waarneming_details %>%
+        html_nodes("th:contains('Datum')~td") %>%
+        html_text()
+      gebied <- waarneming_details %>%
+        html_nodes("th:contains('Gebied')~td>a") %>%
+        html_attr("href")
+      if(toString(gps_coords)!=""){
+        long <- strsplit(gps_coords,", ")[[1]][1] %>% as.numeric()
+        lat <- strsplit(gps_coords,", ")[[1]][2] %>% as.numeric()
+        waarnemingen_mier[i,] <- list(waarneming,datum,long,lat,gebied)
+      } else {
+        waarnemingen_mier[i,] <- list(waarneming,start_jaar,0,0,gebied)
+      }
+    } else {
+      waarnemingen_mier[i,] <- list(waarneming,start_jaar,0,0,gebied)
+    }
+  }
+  
+  dump("waarnemingen_mier",filename)
+} else {
+  source(filename)
+}
+```
+
+Het meest overzichtelijk is een visuele weergave van waar de waardplant en de geparasiteerde mier voorkomen. Hierbij worden alle waarnemingen die "Verborgen" zijn uit de dataset gefilterd, omdat daar geen locatiegegevens van beschikbaar zijn. 
+```{r}
+library(ggmap,quietly=TRUE,verbose=FALSE)
+library(mapproj,quietly=TRUE,verbose=FALSE)
+
+legends<-data.frame("Soort"=c("Gastheer","Waardplant"))
+
+map <- get_map(location = 'Nederland', maptype="hybrid", zoom = 7, language="nl-NL",messaging=FALSE)
+mapPoints <- ggmap(map) + 
+    geom_point(aes(x = lat, y = long), colour="purple", size=2, data = waarnemingen_pimpernel, alpha = .5) +
+    geom_point(aes(x = lat, y = long), colour="red", size=2, data = waarnemingen_mier, alpha = .5) +
+    geom_point(aes(x=0,y=0,colour=Soort),data=legends,alpha=1)
+
+mapPoints + 
+    ggtitle(toString(paste("Waarnemingen van beide soorten in de periode ",start_jaar,"-",eind_jaar,sep=""))) +
+    scale_color_manual(name = "",values=c("red","purple")) +
+    theme(legend.key = element_rect(fill = NA),legend.position = "top")
+```
+
+En dan de belangrijkste vraag: zijn er gebieden waarin waarnemingen gedaan zijn van beide soorten?
+```{r,results="asis"}
+library(xtable,quietly=TRUE,verbose=FALSE)
+
+gebieden <- data.frame("URL"=character(),"Gebiedsnaam"=character(),
+                       "Oppervlakte"=character(),
+                       "Gebiedsinformatie"=character(),stringsAsFactors=FALSE)
+
+for(j in 1:length(matching_gebieden<-waarnemingen_mier[(waarnemingen_mier$gebied %in% waarnemingen_pimpernel$gebied),5])){
+  url_gebied<-str_extract(matching_gebieden[j],"\\d.\\d*") %>%
+    paste(url,"gebied/info/",.,sep="") 
+  html_gebied <- url_gebied %>%
+    read_html() %>%
+    html_node("div.content")
+  naam_gebied <- html_gebied %>%
+    html_node("h1 span") %>%
+    html_text()
+  info_gebied <- html_gebied %>%
+    html_nodes("p.info") %>%
+    html_text()
+  opp_gebied <- html_gebied %>%
+    html_nodes("th:contains('Oppervlak')~td") %>%
+    html_text() %>%
+    str_extract("\\d.\\d*") %>%
+    paste(.," km2")
+  if(toString(info_gebied)!=""){
+    gebieden[j,]<-list(url_gebied,naam_gebied,opp_gebied,info_gebied)
+  } else {
+    gebieden[j,]<-list(url_gebied,naam_gebied,opp_gebied,"")
+  }
+}
+
+table<-xtable(gebieden,caption=paste("Gebieden met waarnemingen van waardplant en gastheer van het Pimpernelblauwtje in de periode ",start_jaar,"-",eind_jaar,sep=""))
+print(table, type="html",caption.placement = getOption("xtable.caption.placement", "top"),
+      include.rownames = getOption("xtable.include.rownames", FALSE))
+```
+Er blijken dus inderdaad verschillende plekken in Nederland te zijn waar zowel de gastheer als de waardplant voorkomen. Éen van die plekken is (gelukkig) de enige plaats in Nederland waar de vlinder inderdaad voorkomt, maar daar vlakbij is nog een tweede geschikte (maar vrij kleine) locatie. Op de grens met België ligt nog een stel aansluitende terreinen. Het is de moeite waard om te kijken of de vlinder daar al in de buurt voorkomt, en of er extra maatregelen genomen kunnen worden om hier een tweede populatie te laten ontstaan. 
+Volgens de kaart is het naast het huidige gebied ook het gebied rond de Weerribben een optie. Maar er zijn nog onvoldoende waarnemingen gedaan van de gastheer in die omgeving. Het kan de moeite waard zijn daar specifiek naar op zoek te gaan, om te kijken of ook hier een levensvatbare populatie van deze vlinder zou kunnen worden opgestart. 
