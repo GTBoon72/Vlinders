@@ -1,0 +1,173 @@
+---
+title: "Vlinders_SpG"
+author: "GB"
+date: "18 januari 2016"
+output: html_document
+---
+
+Ik wil graag een overzicht hebben van welke terreinen de meeste zeldzame vlinders hebben. Omdat dit van week tot week kan verschillen, ga ik dit dus ook per week uitwerken. 
+
+Eerst vraag ik bij waarneming.nl op welke zeldzame vlinders er zijn in Nederland, en wanneer die vliegen. Dat stop ik in aparte tabellen, om deze gegevens later te combineren. 
+
+```{r}
+library(rvest,quietly=TRUE)
+library(stringr,quietly=TRUE)
+zeldzaamheid="z3"
+start_jaar="2015"
+eind_jaar="2015"
+url="http://www.waarneming.nl"
+#url="vliegtijden.html"
+
+filename <- paste("vlinders_",zeldzaamheid,".Rdmpd",sep="")
+
+if(!file.exists(filename)) {
+  vlinder <- paste(url,"/species_active_week_v2.php?","&diergroep=4&jaar=",start_jaar,sep="") %>% 
+    read_html()
+  
+  
+  html_vlinder <- vlinder %>% 
+    html_nodes(.,,paste("//tr[td[a[@class='",zeldzaamheid,"']]]",sep="")) 
+    
+  vlinders <- data.frame(vl_href=character(),vl_naam=character(),lnaam=character(),stringsAsFactors=FALSE)
+
+  vliegtijden <- data.frame(matrix(NA, ncol = 52, nrow = 0))
+  names(vliegtijden)<-c(1:52)
+  
+  for(i in 1:length(html_vlinder)){
+    vl_href <- 
+      strsplit(html_attr(html_node(html_vlinder[i],"a"),"href") %>%
+                str_extract("srt=(\\d.\\d*)"),"=")[[1]][2] %>% 
+                paste("/soort/view/",.,sep="")
+    vl_naam <- strsplit(html_text(html_node(html_vlinder[i],"a"))," - ")[[1]][1]
+    lnaam <- strsplit(html_text(html_node(html_vlinder[i],"a"))," - ")[[1]][2]
+    vlinders[i,] <- list(vl_href,vl_naam,lnaam)
+
+    week_data <- html_nodes(html_vlinder[i],"td[align!='left']")
+    week_data <- week_data[-1]
+    vliegtijden[i,]<-c(html_attr(week_data,"style"))
+    
+  }
+  vliegtijden[is.na(vliegtijden)]<-"0"
+  vliegtijden[vliegtijden=="background: #ffff80;"] <- "0" #kleur van deze week
+  vliegtijden[vliegtijden=="background: #e1e1ff;  border: solid 1px #FFFFFF;width:15px;"] <- "1"
+  vliegtijden[vliegtijden=="background: #c1c1ff;  border: solid 1px #FFFFFF;width:15px;"] <- "2"
+  vliegtijden[vliegtijden=="background: #9e9eff;  border: solid 1px #FFFFFF;width:15px;"] <- "3"
+  vliegtijden[vliegtijden=="background: #6464ff;  border: solid 1px #FFFFFF;width:15px;"] <- "4"
+  vliegtijden[vliegtijden=="background:  #0000ff; border: solid 1px #FFFFFF; width:15px;"] <- "5"
+
+  dump(c("vlinders","vliegtijden"),filename)
+} else {
+  source(filename)
+}
+```
+
+Nu vraag ik van deze zeldzame vlinders alle waarnemingen van 2015 op. Ik wil weten in welke gebieden ze gemeld worden. 
+
+```{r}
+filename <- paste("gebieden_",zeldzaamheid,".Rdmpd",sep="")
+#url="waarnemingen_sleedoornpage.html"
+
+if(!file.exists(filename)) {
+
+  gebieden <- data.frame(geb_href=character(),geb_naam=character(),vl_href=character(),stringsAsFactors=FALSE)
+  i<-0
+  for(href_vlinder in vlinders$vl_href){
+    sub1="?waardplant=0&poly=1"
+    timeframe=paste("&from=",start_jaar,"-01-01&to=",eind_jaar,"-12-31",sep="")
+    sub2="&prov=0&maand=0&rows=0&os=0&hide_hidden=0"
+    html_waarnemingen <- paste(url,href_vlinder,sub1,timeframe,sub2,sep="") %>% 
+      read_html() %>%
+      html_nodes(paste("a[class='",zeldzaamheid,"']",sep=""))
+
+    if(length(html_waarnemingen)>0){
+      for(j in 1:length(html_waarnemingen)){
+        geb_href <- html_attr(html_waarnemingen[j],"href")
+        geb_naam <- html_text(html_waarnemingen[j])
+        gebieden[j+i,] <- c(geb_href,geb_naam,href_vlinder)
+      }
+    gebieden<-unique(gebieden)
+    i<-i+j
+    }
+  }
+  
+  dump("gebieden",filename)
+  
+} else {
+  source(filename)
+}
+
+```
+
+Nu heb ik alle relevante gegevens, en kan ik de combinatie maken:
+
+```{r}
+library(plyr)
+
+#Plot van de aantallen actieve vlindersoorten per week:
+plot(1:52,sapply(c(1:52),function(x) length(which(as.integer(vliegtijden[,x])>0))),xlab="week",ylab="aantal actieve soorten",type="b")
+
+filename <- paste("gebieden_per_week_",zeldzaamheid,".Rdmpd",sep="")
+
+if(!file.exists(filename)) {
+
+  #Een overzicht van de topgebieden voor elke week
+  geb_week <- data.frame(matrix(NA, ncol = 52, nrow = 0))
+  names(geb_week)<-c(1:52)
+  
+  for(k in 1:52){
+    temp<-count(gebieden[gebieden$vl_href %in% vlinders[which(as.integer(vliegtijden[,k])>0),1],],c("geb_href","geb_naam")) %>% 
+      .[order(-.$freq),]
+    if(nrow(temp)>0) {
+      temp<-temp[temp$freq==max(temp$freq),1]
+      geb_week[1:length(temp),k]<-temp
+    }
+  }
+
+  #Een kruistabel van alle combinaties van vlinder, en gebied, verrijkt met
+  #het gegeven of de vlinder daar en dan actief is
+  krtab<-expand.grid(geb=sort(unique(gebieden$geb_naam)),vl=sort(vlinders$vl_naam),stringsAsFactors = F)
+  krtab<-cbind(krtab,act=as.character("F"))
+  for(i in vlinders$vl_naam){
+    for(j in unique(gebieden$geb_naam)){
+        if(i %in% vlinders[which(as.integer(vliegtijden[,20])>0),2] && i %in% vlinders[vlinders$vl_href %in% gebieden[gebieden$geb_naam==j,3],2]) {
+          krtab[krtab$vl==i & krtab$geb==j,3]<-"T"
+        }  
+    }
+  }
+  krtab<-krtab[krtab$act=="T",1:2]
+  krtab<-krtab[order(krtab[,1]),]
+  colnames(krtab)<-c("Gebied","Vlinder")
+  
+  dump(c("geb_week"),filename)
+} else {
+  source(filename)
+}
+```
+
+Ideeen:
++ Maak een rshiny server waarin je met een slider het weeknummer kunt selecteren
++ Laat de top-5 gebieden oplichten op een Googlemap
++ Maak een interactieve map waarbij oplicht wanneer in het jaar elk gebied z'n optimum heeft
+```{r}
+#Lees de gebiedspolygoon uit:
+gbhtml<-read_html("http://waarneming.nl/gebied/info/35534")
+
+paths<- gbhtml %>% html_nodes("script") %>% str_extract("paths: \\[\\[(.*)\\]\\]")
+
+coords <- str_extract_all(na.omit(paths)[1],"\\(.+?\\)")[[1]] %>%
+            sapply(., function(x) (strsplit(x,", ")),USE.NAMES=F) %>% 
+            unlist %>% gsub("\\(|\\)","",.) %>% 
+            matrix(ncol=2,byrow=T) %>% data.frame(stringsAsFactors=F)
+colnames(coords)<-c("lat","lng")
+
+#Toon dit gebied & de polygoon op de Leaflet kaart
+library(leaflet,quietly=TRUE)
+
+kaart <- leaflet() %>%
+    addTiles()
+
+kaart %>% setView(5.913520, 51.405417, zoom = 13) %>% 
+    addPolygons(lng=as.numeric(coords$lng),lat=as.numeric(coords$lat))
+
+
+```
