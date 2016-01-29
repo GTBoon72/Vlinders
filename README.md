@@ -1,5 +1,5 @@
 # Vlinders
-=======
+------------
 Hierin scrape ik de website waarneming.nl, en gebruik ik de data voor een klein onderzoek en meer.
 
 De .Rmd file is een R markdown file, waarin alle code staat waarmee de .html is gegenereerd.
@@ -18,4 +18,4 @@ Gebieden_per_week.Rmd is de code voor een Shiny app, waarin je kunt zoeken wat i
 		locaties de betreffende vlinders in 2015 zijn gezien. Klik je op een waarneming, dan verschijnen de 
 		exacte gps-gegevens van die waarneming (omgerekend van decimalen naar graden).
 		
-=======
+[Voorbeeld van de Leaflet-projectie van de vlinderwaarnemingen](img/Gebieden_per_week.jpg)
