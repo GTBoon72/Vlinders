@@ -40,8 +40,8 @@ fluidRow(
     ),
     wellPanel(
       h5("Controls voor Kaart"),
-      selectInput("gebied", "Gebied",sort(unique(gebieden$geb_naam))),
-      selectInput("vlinder", "Vlinder",sort(vlinders$vl_naam))
+      selectizeInput("gebied", "Gebied",sort(unique(gebieden$geb_naam)), options = list(placeholder = 'Welk gebied?', onInitialize = I('function() { this.setValue(""); }'))),
+      selectizeInput("vlinder", "Vlinder",sort(vlinders$vl_naam), options = list(placeholder = 'Welke vlinder?', onInitialize = I('function() { this.setValue(""); }')))
     )
   ),
 
