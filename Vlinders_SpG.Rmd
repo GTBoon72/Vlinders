@@ -2,7 +2,7 @@
 title: "Vlinders_SpG"
 author: "GB"
 date: "18 januari 2016"
-output: html_document
+output: html_notebook
 ---
 
 Ik wil graag een overzicht hebben van welke terreinen de meeste zeldzame vlinders hebben. Omdat dit van week tot week kan verschillen, ga ik dit dus ook per week uitwerken. 
@@ -12,15 +12,17 @@ Eerst vraag ik bij waarneming.nl op welke zeldzame vlinders er zijn in Nederland
 ```{r}
 library(rvest,quietly=TRUE)
 library(stringr,quietly=TRUE)
+library(readr,quietly=TRUE)
 zeldzaamheid="z3"
-start_jaar="2015"
-eind_jaar="2015"
+start_jaar="2016"
+eind_jaar="2016"
 url="http://www.waarneming.nl"
 #url="vliegtijden.html"
 
-filename <- paste("vlinders_",zeldzaamheid,".Rdmpd",sep="")
+filename_vlinders <- paste("vlinders_",zeldzaamheid,".csv",sep="")
+filename_vliegtijden <- paste("vliegtijden_",zeldzaamheid,".csv",sep="")
 
-if(!file.exists(filename)) {
+if(!file.exists(filename_vlinders)) {
   vlinder <- paste(url,"/species_active_week_v2.php?","&diergroep=4&jaar=",start_jaar,sep="") %>% 
     read_html()
   
@@ -55,16 +57,18 @@ if(!file.exists(filename)) {
   vliegtijden[vliegtijden=="background: #6464ff;  border: solid 1px #FFFFFF;width:15px;"] <- "4"
   vliegtijden[vliegtijden=="background:  #0000ff; border: solid 1px #FFFFFF; width:15px;"] <- "5"
 
-  dump(c("vlinders","vliegtijden"),filename)
+  write_csv(vlinders,filename_vlinders)
+  write_csv(vliegtijden,filename_vliegtijden)
 } else {
-  source(filename)
+  vlinders<-as.data.frame(read_csv(filename_vlinders))
+  vliegtijden<-as.data.frame(read_csv(filename_vliegtijden))
 }
 ```
 
 Nu vraag ik van deze zeldzame vlinders alle waarnemingen van 2015 op. Ik wil weten in welke gebieden ze gemeld worden. 
 
 ```{r}
-filename <- paste("gebieden_",zeldzaamheid,".Rdmpd",sep="")
+filename <- paste("gebieden_",zeldzaamheid,".csv",sep="")
 #url="waarnemingen_sleedoornpage.html"
 
 if(!file.exists(filename)) {
@@ -90,10 +94,10 @@ if(!file.exists(filename)) {
     }
   }
   
-  dump("gebieden",filename)
+  write_csv(gebieden,filename)
   
 } else {
-  source(filename)
+  gebieden<-as.data.frame(read_csv(filename))
 }
 
 ```
@@ -101,12 +105,7 @@ if(!file.exists(filename)) {
 Nu heb ik alle relevante gegevens, en kan ik de combinatie maken:
 
 ```{r}
-library(plyr)
-
-#Plot van de aantallen actieve vlindersoorten per week:
-plot(1:52,sapply(c(1:52),function(x) length(which(as.integer(vliegtijden[,x])>0))),xlab="week",ylab="aantal actieve soorten",type="b")
-
-filename <- paste("gebieden_per_week_",zeldzaamheid,".Rdmpd",sep="")
+filename <- paste("gebieden_per_week_",zeldzaamheid,".csv",sep="")
 
 if(!file.exists(filename)) {
 
@@ -115,7 +114,7 @@ if(!file.exists(filename)) {
   names(geb_week)<-c(1:52)
   
   for(k in 1:52){
-    temp<-count(gebieden[gebieden$vl_href %in% vlinders[which(as.integer(vliegtijden[,k])>0),1],],c("geb_href","geb_naam")) %>% 
+    temp<-count(gebieden[gebieden$vl_href %in% vlinders[which(vliegtijden[,k]>0),1],],c("geb_href","geb_naam")) %>% 
       .[order(-.$freq),]
     if(nrow(temp)>0) {
       temp<-temp[temp$freq==max(temp$freq),1]
@@ -124,12 +123,12 @@ if(!file.exists(filename)) {
   }
 
   #Een kruistabel van alle combinaties van vlinder, en gebied, verrijkt met
-  #het gegeven of de vlinder daar en dan actief is
+  #het gegeven of de vlinder daar en dan actief is (als voorbeeld, hieronder week 20)
   krtab<-expand.grid(geb=sort(unique(gebieden$geb_naam)),vl=sort(vlinders$vl_naam),stringsAsFactors = F)
   krtab<-cbind(krtab,act=as.character("F"))
   for(i in vlinders$vl_naam){
     for(j in unique(gebieden$geb_naam)){
-        if(i %in% vlinders[which(as.integer(vliegtijden[,20])>0),2] && i %in% vlinders[vlinders$vl_href %in% gebieden[gebieden$geb_naam==j,3],2]) {
+        if(i %in% vlinders[which(vliegtijden[,20]>0),2] && i %in% vlinders[vlinders$vl_href %in% gebieden[gebieden$geb_naam==j,3],2]) {
           krtab[krtab$vl==i & krtab$geb==j,3]<-"T"
         }  
     }
@@ -138,10 +137,18 @@ if(!file.exists(filename)) {
   krtab<-krtab[order(krtab[,1]),]
   colnames(krtab)<-c("Gebied","Vlinder")
   
-  dump(c("geb_week"),filename)
+  write_csv(geb_week,filename)
 } else {
-  source(filename)
+  geb_week<-as.data.frame(read_csv(filename))
 }
+```
+
+Extra's
+```{r}
+library(plyr)
+
+#Plot van de aantallen actieve vlindersoorten per week:
+plot(1:52,sapply(c(1:52),function(x) length(which(vliegtijden[,x]>0))),xlab="week",ylab="aantal actieve soorten",type="b")
 ```
 
 Ideeen:

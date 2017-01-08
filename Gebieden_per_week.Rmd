@@ -18,10 +18,12 @@ library(leaflet,quietly=TRUE)
 library(rvest,quietly=TRUE)
 library(stringr,quietly=TRUE)
 library(sp,quietly=TRUE)
+library(readr,quietly=TRUE)
 
-source("gebieden_per_week_z3.Rdmpd")
-source("gebieden_z3.Rdmpd")
-source("vlinders_z3.Rdmpd")
+vlinders<-as.data.frame(read_csv("vlinders_z3.csv"))
+vliegtijden<-as.data.frame(read_csv("vliegtijden_z3.csv"))
+gebieden<-as.data.frame(read_csv("gebieden_z3.csv"))
+geb_week<-as.data.frame(read_csv("gebieden_per_week_z3.csv"))
 
 url="http://waarneming.nl"
 
@@ -53,7 +55,7 @@ fluidRow(
           table <- as.data.frame(unique(gebieden[gebieden$geb_href %in% na.omit(geb_week[,weeknr]),2]))
           colnames(table)<-"Gebied"
           table
-        },rownames= FALSE))
+        },rownames= FALSE,selection='none'))
       ),
       tabPanel("Kruistabel", 
         DT::renderDataTable(DT::datatable({
@@ -62,7 +64,7 @@ fluidRow(
           krtab<-cbind(krtab,act=as.character("F"))
           for(i in vlinders$vl_naam){
             for(j in unique(gebieden$geb_naam)){
-                if(i %in% vlinders[which(as.integer(vliegtijden[,weeknr])>0),2] && i %in% vlinders[vlinders$vl_href %in% gebieden[gebieden$geb_naam==j,3],2]) {
+                if(i %in% vlinders[which(vliegtijden[,weeknr]>0),2] && i %in% vlinders[vlinders$vl_href %in% gebieden[gebieden$geb_naam==j,3],2]) {
                   krtab[krtab$vl==i & krtab$geb==j,3]<-"T"
                 }  
             }
@@ -71,26 +73,34 @@ fluidRow(
           krtab<-krtab[order(krtab[,1]),]
           colnames(krtab)<-c("Gebied","Vlinder")
           krtab
-        },rownames= FALSE))
+        },rownames= FALSE,selection='none'))
       ),
       tabPanel("Op de kaart",
         renderLeaflet({
           #Vraag de gebiedspolygoon op
-          geb_html<-paste(url,gsub("view","info",geb_href<-unique(gebieden[gebieden$geb_naam==input$gebied,1])),sep="") %>% 
+          #geb_href<-unique(gebieden[gebieden$geb_naam==input$gebied,1])
+          geb_html<-paste(url,gsub("view","info",geb_href<-unique(gebieden[gebieden$geb_naam==input$gebied,1])),sep="") %>%
                     read_html
-          
-          paths <- geb_html %>% html_nodes("script") %>% str_extract("paths: \\[\\[(.*)\\]\\]")
-          
-          geb_coords <- str_extract_all(na.omit(paths)[1],"\\(.+?\\)")[[1]] %>%
-                      sapply(., function(x) (strsplit(x,", ")),USE.NAMES=F) %>% 
-                      unlist %>% gsub("\\(|\\)","",.) %>% 
-                      matrix(ncol=2,byrow=T) %>% data.frame(stringsAsFactors=F)
-          colnames(geb_coords)<-c("lat","lng")
-          
+#          geb_html<-paste(url,gsub("view","info",geb_href<-unique(gebieden[gebieden$geb_naam=="Mariapeel - Mariaveen [LI]",1])),sep="") %>% read_html
+
+#          paths <- geb_html %>% html_nodes("script") %>% str_extract("paths: \\[\\[(.*)\\]\\]")
+          poly <- geb_html %>% html_nodes("script") %>% 
+                    str_extract_all("(?<=MULTIPOLYGON).*(?=' ;)") %>% unlist
+
+          geb_coords <- strsplit(poly,'[(,)]')[[1]][-1] %>% strsplit(" ") %>% unlist() %>% 
+                    matrix(ncol=2,byrow=T) %>% data.frame(stringsAsFactors=F)
+          colnames(geb_coords)<-c("lng","lat")
+
+#          geb_coords <- str_extract_all(na.omit(paths)[1],"\\(.+?\\)")[[1]] %>%
+#                      sapply(., function(x) (strsplit(x,", ")),USE.NAMES=F) %>%
+#                      unlist %>% gsub("\\(|\\)","",.) %>%
+#                      matrix(ncol=2,byrow=T) %>% data.frame(stringsAsFactors=F)
+#          colnames(geb_coords)<-c("lat","lng")
+
           #Lees de waarnemingen uit
           waarnemingen <- data.frame(waarneming=character(),long=as.numeric(),lat=as.numeric(),stringsAsFactors=FALSE)
-          sub="&g=0&from=2015-01-01&to=2015-12-31&rows=0&z=0&u=0"
-          
+          sub="&g=0&from=2016-01-01&to=2016-12-31&rows=0&z=0&u=0"
+
           geb_vl_html<-paste(url,geb_href,"?sp=",str_extract(vlinders[vlinders$vl_naam==input$vlinder,1],"\\d.\\d*"),sub,sep="") %>%
             read_html() %>%
             html_nodes("a.tooltip") %>%
@@ -100,7 +110,7 @@ fluidRow(
             for(i in 1:length(geb_vl_html)){
               if(geb_vl_html[i]!="  "){
                 waarneming_details <- paste(url,waarneming<-geb_vl_html[i],sep="") %>%
-                  read_html() 
+                  read_html()
                 gps_coords <- waarneming_details %>%
                   html_nodes("th:contains('GPS')~td") %>%
                   html_text()
@@ -117,17 +127,17 @@ fluidRow(
             }
         }
 
-          
+
           #Toon dit gebied & de polygoon & de waarnemingen op de Leaflet kaart
           if(length(waarnemingen$waarneming)>0){
             leaflet() %>%
-                addTiles() %>% 
-                addPolygons(lng=as.numeric(geb_coords$lng),lat=as.numeric(geb_coords$lat),fillColor="#0",fillOpacity = 0.1) %>% 
+                addTiles() %>%
+                addPolygons(lng=as.numeric(geb_coords$lng),lat=as.numeric(geb_coords$lat),fillColor="#0",fillOpacity = 0.1) %>%
                 addCircleMarkers(lng=waarnemingen$long,lat=waarnemingen$lat,color="purple",popup=paste("N",dec2dmm(waarnemingen$lat),", E",dec2dmm(waarnemingen$long),sep=""))
           } else {
             leaflet() %>%
-                addTiles() %>% 
-                addPolygons(lng=as.numeric(geb_coords$lng),lat=as.numeric(geb_coords$lat),fillColor="#0",fillOpacity = 0.1) 
+                addTiles() %>%
+                addPolygons(lng=as.numeric(geb_coords$lng),lat=as.numeric(geb_coords$lat),fillColor="#0",fillOpacity = 0.1)
           }
         })
       )
